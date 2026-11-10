@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smèrrig Monitor</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #14101a;
+    --panel: #1f1927;
+    --line: #382d47;
+    --text: #f3eef8;
+    --muted: #a99bbb;
+    --accent: #ff4f8b;
+    --ok: #3ecf8e;
+    --warn: #ffb020;
+    --full: #ff5a5f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  h1 { margin: 0; font-size: 1.5rem; }
+  h1 span { color: var(--accent); }
+  .meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .pill { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: .9rem; }
+  .pill.on { border-color: var(--ok); color: var(--ok); }
+  .pill.off { border-color: var(--warn); color: var(--warn); }
+  .total { font-size: 1.1rem; }
+  .privacy { color: var(--muted); font-size: .85rem; margin: 0 0 16px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .zone { background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 12px; min-height: 150px; }
+  .zone.druk { border-color: var(--warn); }
+  .zone.vol { border-color: var(--full); }
+  .zone h2 { margin: 0; font-size: 1.05rem; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .count { font-size: 1.8rem; font-weight: 700; }
+  .badge { font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  .badge.rustig { background: rgba(62,207,142,.15); color: var(--ok); }
+  .badge.druk { background: rgba(255,176,32,.18); color: var(--warn); }
+  .badge.vol { background: rgba(255,90,95,.2); color: var(--full); }
+  .cap { color: var(--muted); font-size: .8rem; margin: 4px 0 8px; display: flex; gap: 6px; align-items: center; }
+  .cap input { width: 3.5em; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .chip { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 2px 10px; font-weight: 600; }
+  .chip small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .empty { color: var(--muted); font-size: .9rem; }
+  .nosignal { margin-top: 12px; border-style: dashed; min-height: 0; }
+
+  details { margin-top: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  summary { cursor: pointer; font-weight: 600; }
+  .demo-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .demo-row strong { min-width: 3.5em; }
+  button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.off { color: var(--full); }
+  .note { color: var(--muted); font-size: .85rem; margin-top: 10px; }
+  @media (max-width: 480px) { body { padding: 12px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sm<span>è</span>rrig monitor</h1>
+  <div class="meta">
+    <span id="conn" class="pill off">Verbinden...</span>
+    <span class="total"><span id="total">0</span> harten in de zaal</span>
+  </div>
+</header>
+<p class="privacy">Toont alleen hart-ID, zone en laatste melding. Geen namen, statussen of likes. Er wordt niets bewaard.</p>
+
+<main>
+  <section id="zones" class="grid" aria-label="Zones"></section>
+  <section id="nosignal" class="zone nosignal" aria-label="Geen signaal">
+    <h2>Geen signaal <span class="count" id="nosignal-count">0</span></h2>
+    <p class="cap">Langer dan 60 seconden geen melding</p>
+    <ul class="chips" id="nosignal-list"></ul>
+  </section>
+
+  <details id="demo">
+    <summary>Demopaneel (alleen voor de presentatie)</summary>
+    <div id="demo-rows"></div>
+    <p class="note">Elk demohart stuurt elke 10 seconden zijn zone door, zoals de echte harten. "Zet uit" stopt dat, en na 60 seconden staat het hart onder "Geen signaal".</p>
+  </details>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // Moet gelijk zijn aan de topic-prefix in wokwi/hart/sketch.ino en ontwerpdocument §6.4
+  var PREFIX = 'smerrig013/BoostProject/';
+  var BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+  var STALE_MS = 60 * 1000;
+  var HEARTBEAT_MS = 10 * 1000;
+  var MAX_HEARTS = 300;   // de broker is openbaar: houd de pagina bruikbaar bij rommelberichten
+  var DRUK = 0.7;         // vanaf 70% van de capaciteit: druk
+  var VOL = 1.0;          // vanaf 100%: vol
+
+  var ZONES = [
+    { key: 'ingang',    naam: 'Ingang / garderobe', cap: 4 },
+    { key: 'dansvloer', naam: 'Dansvloer',          cap: 4 },
+    { key: 'bar',       naam: 'Bar',                cap: 3 },
+    { key: 'chill',     naam: 'Chillruimte',        cap: 3 },
+    { key: 'toilet',    naam: 'Toiletten',          cap: 2 }
+  ];
+  var zoneByKey = {};
+  ZONES.forEach(function (z) { zoneByKey[z.key] = z; });
+
+  var hearts = new Map();   // id -> { zone, ts }
+  var client = null;
+  var connected = false;
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;   // textContent: berichten van de openbare broker worden nooit als HTML gelezen
+    return e;
+  }
+
+  // ---------- Gegevens ----------
+  function report(id, zone) {
+    if (!/^[A-Za-z0-9_-]{1,12}$/.test(id)) return;
+    if (!zoneByKey[zone]) return;
+    if (!hearts.has(id) && hearts.size >= MAX_HEARTS) return;
+    hearts.set(id, { zone: zone, ts: Date.now() });
+    render();
+  }
+
+  function onMessage(topic, payload) {
+    var m = topic.match(/^smerrig013\/BoostProject\/hart\/([^/]+)\/zone$/);
+    if (!m) return;
+    report(m[1], String(payload).trim());
+  }
+
+  // ---------- Weergave ----------
+  var zonesEl = document.getElementById('zones');
+  var capInputs = {};
+
+  function buildZones() {
+    ZONES.forEach(function (z) {
+      var card = el('section', 'zone');
+      card.id = 'zone-' + z.key;
+      var h = el('h2');
+      h.appendChild(el('span', '', z.naam));
+      var count = el('span', 'count', '0');
+      count.id = 'count-' + z.key;
+      h.appendChild(count);
+      card.appendChild(h);
+
+      var badge = el('span', 'badge rustig', 'rustig');
+      badge.id = 'badge-' + z.key;
+      var cap = el('div', 'cap');
+      var label = el('label', '', 'Capaciteit ');
+      var input = el('input');
+      input.type = 'number'; input.min = '1'; input.max = '999'; input.value = String(z.cap);
+      input.addEventListener('input', function () {
+        var v = parseInt(input.value, 10);
+        if (v >= 1) { z.cap = v; render(); }
+      });
+      label.appendChild(input);
+      capInputs[z.key] = input;
+      cap.appendChild(label);
+      cap.appendChild(badge);
+      card.appendChild(cap);
+
+      var list = el('ul', 'chips');
+      list.id = 'list-' + z.key;
+      card.appendChild(list);
+      zonesEl.appendChild(card);
+    });
+  }
+
+  function chip(id, ts) {
+    var li = el('li', 'chip', id);
+    var secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    li.appendChild(el('small', '', secs + ' s'));
+    return li;
+  }
+
+  function render() {
+    var now = Date.now();
+    var active = {}, stale = [];
+    ZONES.forEach(function (z) { active[z.key] = []; });
+
+    hearts.forEach(function (h, id) {
+      if (now - h.ts > STALE_MS) stale.push({ id: id, ts: h.ts });
+      else active[h.zone].push({ id: id, ts: h.ts });
+    });
+
+    var total = 0;
+    ZONES.forEach(function (z) {
+      var arr = active[z.key].sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+      total += arr.length;
+      var ratio = arr.length / z.cap;
+      var state = ratio >= VOL ? 'vol' : ratio >= DRUK ? 'druk' : 'rustig';
+
+      document.getElementById('zone-' + z.key).className = 'zone ' + (state === 'rustig' ? '' : state);
+      document.getElementById('count-' + z.key).textContent = String(arr.length);
+      var badge = document.getElementById('badge-' + z.key);
+      badge.className = 'badge ' + state;
+      badge.textContent = state;
+
+      var list = document.getElementById('list-' + z.key);
+      list.textContent = '';
+      if (!arr.length) list.appendChild(el('li', 'empty', 'Niemand'));
+      arr.forEach(function (h) { list.appendChild(chip(h.id, h.ts)); });
+    });
+
+    document.getElementById('total').textContent = String(total);
+    document.getElementById('nosignal-count').textContent = String(stale.length);
+    var nl = document.getElementById('nosignal-list');
+    nl.textContent = '';
+    if (!stale.length) nl.appendChild(el('li', 'empty', 'Geen'));
+    stale.sort(function (a, b) { return a.id < b.id ? -1 : 1; })
+         .forEach(function (h) { nl.appendChild(chip(h.id, h.ts)); });
+  }
+
+  function setConn(on, text) {
+    connected = on;
+    var c = document.getElementById('conn');
+    c.className = 'pill ' + (on ? 'on' : 'off');
+    c.textContent = text;
+  }
+
+  // ---------- MQTT ----------
+  function connect() {
+    if (typeof mqtt === 'undefined') {
+      setConn(false, 'Geen verbinding (alleen demo)');
+      return;
+    }
+    client = mqtt.connect(BROKER, { clientId: 'monitor-' + Math.random().toString(16).slice(2, 10), reconnectPeriod: 3000 });
+    client.on('connect', function () {
+      setConn(true, 'Verbonden met broker');
+      client.subscribe(PREFIX + 'hart/+/zone');
+    });
+    client.on('reconnect', function () { setConn(false, 'Opnieuw verbinden...'); });
+    client.on('offline', function () { setConn(false, 'Geen verbinding (alleen demo)'); });
+    client.on('error', function () { setConn(false, 'Geen verbinding (alleen demo)'); });
+    client.on('message', onMessage);
+  }
+
+  // ---------- Demopaneel ----------
+  var sim = new Map();   // id -> { zone, aan, timer }
+
+  function publishZone(id, zone) {
+    if (client && connected) client.publish(PREFIX + 'hart/' + id + '/zone', zone);
+  }
+
+  function simSend(id) {
+    var s = sim.get(id);
+    if (!s || !s.aan) return;
+    report(id, s.zone);
+    publishZone(id, s.zone);
+  }
+
+  function buildDemo() {
+    var rows = document.getElementById('demo-rows');
+    ['A', 'B', 'C', 'D'].forEach(function (id) {
+      sim.set(id, { zone: null, aan: false, timer: null });
+      var row = el('div', 'demo-row');
+      row.appendChild(el('strong', '', 'Hart ' + id));
+      ZONES.forEach(function (z) {
+        var b = el('button', '', z.naam);
+        b.type = 'button';
+        b.addEventListener('click', function () {
+          var s = sim.get(id);
+          s.zone = z.key; s.aan = true;
+          if (!s.timer) s.timer = setInterval(function () { simSend(id); }, HEARTBEAT_MS);
+          simSend(id);
+        });
+        row.appendChild(b);
+      });
+      var off = el('button', 'off', 'Zet uit');
+      off.type = 'button';
+      off.addEventListener('click', function () { sim.get(id).aan = false; });
+      row.appendChild(off);
+      rows.appendChild(row);
+    });
+  }
+
+  buildZones();
+  buildDemo();
+  render();
+  setInterval(render, 1000);   // tijden bijwerken en "geen signaal" bepalen
+  connect();
+})();
+</script>
+</body>
+</html>
