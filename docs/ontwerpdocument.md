@@ -3,7 +3,8 @@
 **Concept:** het Smèrrig-hart, een slimme hartketting voor Smèrrig in Poppodium 013  
 **Project:** Hackaton 6 (LJ4), kerntaak 2  
 **Prototype-omgeving:** [Wokwi](https://wokwi.com/) (ESP32)  
-**Versie:** 0.2 (concept, besproken in het team)
+**Versie:** 0.3 (prototype gebouwd in Wokwi)  
+**Code:** https://github.com/J0C0M/BoostProjectLJ4Hackaton6 (branch `development`, map `wokwi/hart/`)
 
 > Dit document bouwt voort op de eerste conceptuitwerking (NFC-hartketting, uitgewerkt voor Tinkercad).
 > In de wijzigingslog onderaan staat wat er is veranderd en waarom.
@@ -126,44 +127,62 @@ matchen**. Voor de presentatie is dat veel sterker dan losse knoppen.
 | Knop LIKE | GPIO 33 → knop → GND (`INPUT_PULLUP`) |
 | Zoemer | GPIO 25 → zoemer → GND |
 
-> Dit controleren we bij de bouw in Wokwi aan de hand van de pin-labels van de parts.
+> Zo is het ook gebouwd in Wokwi (zie `wokwi/hart/diagram.json`).
 
 ### 6.3 Toestanden (state machine)
 
 ```
-            STATUS-knop: volgende status
-          ┌────────────┐
-          ▼            │
-     ┌─────────┐ ──────┘           like ontvangen
-     │  IDLE   │ ─────────────────────────────► [knipper roze, 2 s] ──► IDLE
-     │ (status-│
-     │  kleur) │      kaart getikt (MFRC522)
-     └─────────┘ ─────────────────────────────► ┌────────────┐
-          ▲                                     │  GETIKT    │  OLED: "Hart #B – single"
-          │      5 s niets gedaan               │ (wit puls) │  ring: kleur van het andere hart
-          ├──────────────────────────────────── └────────────┘
-          │                                           │ LIKE-knop
-          │                                           ▼
-          │                                     like versturen (MQTT)
-          │                                           │
-          │        geen wederzijdse like              ▼
-          ├───────────────────────────────── heeft B mij al geliket?
-          │                                           │ ja
-          │                                           ▼
-          │      na 5 s                         ┌────────────┐
-          └──────────────────────────────────── │   MATCH!   │  melodie + regenboog
-                                                └────────────┘  match-bericht naar B
+             STATUS-knop: volgende status (melding 1,5 s)
+           ┌───────────┐
+           ▼           │
+      ┌──────────┐ ────┘          like ontvangen (anoniem)
+      │   IDLE   │ ──────────────────────────────► [roze knipperen, 2,5 s] ──► IDLE
+      │ (eigen   │
+      │ status-  │      kaart getikt (MFRC522)
+      │ kleur,   │ ──────────────────────────────► ┌──────────────┐ OLED: "Hart B: single"
+      │ ademt)   │                                 │    GETIKT    │       "LIKE = like sturen"
+      └──────────┘                                 │ (kleur ander │ ring: kleur van het andere
+           ▲                                       │ hart + wit   │       hart + rondlopend wit
+           │        5 s niets gedaan               │ lichtje)     │       lichtje
+           ├────────────────────────────────────── └──────────────┘
+           │                                              │ LIKE-knop
+           │                                              ▼
+           │                                      like versturen (MQTT)
+           │   geen wederzijdse like:                     │
+           │   "Like verstuurd" (2 s)                     ▼
+           ├───────────────────────────────────── heeft B mij al geliket?
+           │                                              │ ja
+           │                                              ▼
+           │        na 6 s                        ┌──────────────┐
+           └───────────────────────────────────── │    MATCH!    │ melodie + regenboog
+                                                  └──────────────┘ match-bericht naar B
 ```
+
+Naast deze toestanden toont het hart **korte meldingen** op de OLED. De ring blijft dan in de
+eigen statuskleur:
+
+| Situatie | Melding op de OLED | Duur |
+|---|---|---|
+| Status gewisseld | "Status: single / bezet / ingewikkeld" | 1,5 s |
+| LIKE zonder voorafgaande tik | "Tik eerst een hart aan" | 1,5 s |
+| Eigen hart getikt | "Dit is je eigen hart :)" | 2 s |
+| Onbekende kaart getikt | "Onbekend hart" + UID | 2 s |
+| LIKE terwijl het hart offline is | "Offline: like niet verstuurd" | 2 s |
+| Like verstuurd, nog geen match | "Like verstuurd naar hart B" | 2 s |
+
+Bovenaan de OLED staan altijd het eigen hart-ID, de eigen status en de verbinding
+("WiFi verbinden...", "offline" of "online"). Zonder verbinding werken de status en het tikken
+gewoon door, alleen likes kunnen dan niet worden verstuurd.
 
 ### 6.4 Communicatie (MQTT)
 
 - **Netwerk:** `Wokwi-GUEST` (geen wachtwoord)
-- **Broker:** een openbare testbroker (bijv. `broker.hivemq.com` of `test.mosquitto.org`, poort 1883)
-- **Topic-prefix:** `smerrig013/<teamnaam>/` (uniek, zodat we geen berichten van anderen binnenkrijgen)
+- **Broker:** `broker.hivemq.com`, poort 1883 (openbare testbroker; alternatief `test.mosquitto.org`)
+- **Topic-prefix:** `smerrig013/BoostProject/` (uniek, zodat we geen berichten van anderen binnenkrijgen)
 
 | Topic | Payload | Wie publiceert | Wie luistert |
 |---|---|---|---|
-| `…/hart/<id>/status` (retained) | `single` / `bezet` / `ingewikkeld` | Elk hart bij een statuswissel | Een hart dat <id> heeft getikt |
+| `…/hart/<id>/status` (retained) | `single` / `bezet` / `ingewikkeld` | Elk hart bij een statuswissel en bij het verbinden | Alle harten (elk hart onthoudt de laatste status van ieder hart) |
 | `…/hart/<id>/like` | `<van-id>` | Het hart dat liket | Hart <id> |
 | `…/hart/<id>/match` | `<van-id>` | Het hart dat de match ontdekt | Hart <id> |
 
@@ -173,23 +192,55 @@ ontvangen. Als A op like drukt en A al een like van B had, is er een match: A sp
 zodat er blokkeren en melden mogelijk is.
 
 ### 6.5 Hart-ID's in de demo
-De kaarten in de MFRC522-bediening van Wokwi hebben elk een vast UID. Die koppelen we aan hart-ID's,
-bijvoorbeeld:
+De kaarten in de MFRC522-bediening van Wokwi hebben elk een vast UID. Die koppelen we in de code aan
+hart-ID's:
 
-| Wokwi-kaart | Staat voor |
-|---|---|
-| Groene kaart | Hart A |
-| Gele kaart | Hart B |
-| Rode kaart | Hart C |
+| Wokwi-kaart | UID | Staat voor |
+|---|---|---|
+| Groene kaart | `11 22 33 44` | Hart A |
+| Gele kaart | `55 66 77 88` | Hart B |
+| Rode kaart | `AA BB CC DD` | Hart C |
+| Overige kaarten (blauw, NFC-tag, sleutelhanger) | – | "Onbekend hart" |
 
 We gebruiken één sketch voor elk hart. Alleen de constante `MIJN_ID` verschilt (A of B). In de demo
 draaien we twee Wokwi-projecten naast elkaar.
 
 ### 6.6 Demo-scenario (presentatie)
 1. Hart A zet de status op **single** (groen), hart B op **het is ingewikkeld** (geel).
-2. A tikt de gele kaart (= hart B). De OLED van A toont "Hart B – ingewikkeld".
+2. A tikt de gele kaart (= hart B). De OLED van A toont "Hart B: ingewikkeld".
 3. A drukt op LIKE. Hart B knippert roze: "iemand vindt je leuk".
 4. B tikt de groene kaart (= hart A) en drukt op LIKE. **MATCH:** beide harten spelen een melodie en laten een regenboog zien.
+
+### 6.7 Gerealiseerd prototype
+Het prototype is gebouwd in Wokwi en staat in Git.
+
+| Wat | Waar |
+|---|---|
+| Hart A (Wokwi) | https://wokwi.com/projects/480295580175545345 |
+| Hart B (Wokwi) | https://wokwi.com/projects/480300556742591489 |
+| Code en schakeling | `wokwi/hart/` in de repo: `sketch.ino`, `diagram.json`, `libraries.txt` |
+| Instructies | `wokwi/hart/README.md` |
+
+**Bediening in de simulatie**
+
+| Actie | Hoe |
+|---|---|
+| Status wisselen | Groene knop STATUS (of toets `S`) |
+| Hart-tik | Klik op de MFRC522, kies een kaart en klik op **Tap** |
+| Like sturen | Rode knop LIKE (of toets `L`) binnen 5 s na een tik |
+
+**Opbouw van de code:** de code werkt niet-blokkerend, zodat licht, geluid, scherm en netwerk
+tegelijk kunnen lopen. Elke lus leest de knoppen en de NFC-lezer, verwerkt MQTT-berichten en werkt
+daarna de LED-ring, de zoemer en het scherm bij volgens de toestand uit §6.3. Hart B is dezelfde code
+met `MIJN_ID = 'B'`.
+
+**Stand van het testen (10 november)**
+- De code compileert zonder fouten voor de ESP32.
+- Het uitlezen van de kaarten met de MFRC522 is in Wokwi getest en werkt. De UID's kloppen met §6.5.
+- De volledige match-demo met hart A en hart B (§6.6) moet nog getest worden. Dat doen we met het testplan in `planning.md`.
+
+**Eigen test-ID's voor de demo:** wie meer harten wil laten zien, voegt een kaart en een ID toe aan
+`HARTEN` en `KAART_UID` in de code.
 
 ## 7. Productie en kosten
 
@@ -238,8 +289,7 @@ NFC-lezer, LED's en twee harten die via het internet met elkaar matchen.
 | Demo-weergave | OLED-scherm in de schakeling (zit niet in het echte product) |
 | Verbinding in het prototype | MQTT met twee harten in twee Wokwi-projecten, plus een achtervangvideo |
 | Extra's | Ontwerpdocument ook als Word-versie (.docx). Geen 3D-hart. |
-
-**Nog open:** welke broker (HiveMQ of Mosquitto) en de teamnaam in de topic-prefix. Dit bepalen we bij de MQTT-spike in sprint 1.
+| Broker en topic-prefix | `broker.hivemq.com`, prefix `smerrig013/BoostProject/` |
 
 ## Wijzigingslog
 | Versie | Wijziging | Reden |
@@ -248,3 +298,5 @@ NFC-lezer, LED's en twee harten die via het internet met elkaar matchen.
 | 0.1 | Concept van passieve NFC-tag naar ESP32-hart met LED's, zoemer en NFC | De opdracht vraagt om een microcontroller en de status moet in het donker zichtbaar zijn |
 | 0.1 | Prototypeontwerp, pinplan, toestanden en MQTT-topics toegevoegd | Voorbereiding op de bouw in Wokwi |
 | 0.2 | Teambeslissingen vastgelegd (concept, OLED, MQTT, Word-versie) | Ontwerpbespreking |
+| 0.3 | Broker, topic-prefix en kaart-UID's ingevuld, §6.7 Gerealiseerd prototype toegevoegd | Prototype gebouwd in Wokwi |
+| 0.3 | Toestanden (§6.3), meldingen, tijden en MQTT-luisteraars (§6.4) gelijkgetrokken met de code, teststand toegevoegd | Document moet beschrijven wat er gebouwd is |

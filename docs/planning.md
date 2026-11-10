@@ -8,23 +8,27 @@ review en een retrospective. Die leveren het bewijs voor W1, W2 en W3.
 
 - [ ] Dagstart: rollen verdelen (bijv. scrummaster, bouwer hardware/sketch, documentatie/presentatie) en notulen maken (W1)
 - [x] Ontwerpbeslissingen genomen (concept, OLED, MQTT, Word-versie)
-- [ ] Broker en teamnaam voor de topic-prefix kiezen
-- [ ] Ontwerpdocument afmaken (v1.0) en eventueel omzetten naar .docx voor de inlevering
-- [ ] Wokwi-account, nieuw ESP32-project, schakeling uit het pinplan opbouwen
-- [ ] Spike: werken de MFRC522-kaarten? UID's van de kaarten noteren
-- [ ] Spike: werkt MQTT vanuit Wokwi naar de gekozen broker?
+- [x] Broker en teamnaam voor de topic-prefix kiezen (`broker.hivemq.com`, `smerrig013/BoostProject/`)
+- [ ] Ontwerpdocument afmaken (v1.0) en omzetten naar .docx voor de inlevering (nu v0.3, .docx is er)
+- [x] Wokwi-account, nieuw ESP32-project, schakeling uit het pinplan opbouwen
+- [x] Spike: werken de MFRC522-kaarten? UID's van de kaarten noteren (zie ontwerpdocument §6.5)
+- [ ] Spike: werkt MQTT vanuit Wokwi naar de gekozen broker? (testproject `MQTT-test` staat klaar, resultaat nog noteren)
 - [ ] **Product review 1:** ontwerp + lege schakeling aan de docent laten zien, feedback noteren
 - [ ] **Retrospective 1** (bijv. Start/Stop/Continue)
 
 ## Sprint 2: Bouw (dag 2)
 **Doel:** één hart werkt volledig en twee harten matchen met elkaar.
 
-- [ ] Status-knop met kleuren op de LED-ring (single/bezet/ingewikkeld)
-- [ ] Kaart tikken: UID uitlezen, omzetten naar hart-ID en tonen op de OLED
-- [ ] Wifi + MQTT: status publiceren (retained) en status van een getikt hart ophalen
-- [ ] LIKE: like versturen, ontvangen like laten knipperen
-- [ ] Matchlogica, melodie en regenboog-animatie
-- [ ] Tweede Wokwi-project (hart B) met dezelfde sketch en `MIJN_ID = "B"`
+> Stand 10 november: alle onderdelen hieronder zijn in de code gebouwd (`wokwi/hart/sketch.ino`) en de code compileert. In Wokwi is alleen het uitlezen van de kaarten getest. De rest testen we met het testplan hieronder.
+
+- [x] Status-knop met kleuren op de LED-ring (single/bezet/ingewikkeld)
+- [x] Kaart tikken: UID uitlezen, omzetten naar hart-ID en tonen op de OLED
+- [x] Wifi + MQTT: status publiceren (retained) en status van een getikt hart ophalen
+- [x] LIKE: like versturen, ontvangen like laten knipperen
+- [x] Matchlogica, melodie en regenboog-animatie
+- [x] Tweede Wokwi-project (hart B) met dezelfde sketch en `MIJN_ID = 'B'`
+- [ ] Hart A in Wokwi bijwerken met de juiste `diagram.json`
+- [ ] Match-demo met hart A en B testen in Wokwi (T1–T8)
 - [ ] **Product review 2:** demo van de flow, feedback noteren
 - [ ] **Retrospective 2**
 
