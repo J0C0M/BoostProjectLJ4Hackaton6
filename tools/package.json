@@ -1,0 +1,10 @@
+{
+  "name": "smerrig-docs-tools",
+  "private": true,
+  "scripts": {
+    "docx": "node md2docx.js ../docs/ontwerpdocument.md ../docs/ontwerpdocument.docx"
+  },
+  "dependencies": {
+    "docx": "^9.15.3"
+  }
+}
