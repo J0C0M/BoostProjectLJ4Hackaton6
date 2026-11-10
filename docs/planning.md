@@ -27,6 +27,8 @@ review en een retrospective. Die leveren het bewijs voor W1, W2 en W3.
 - [x] LIKE: like versturen, ontvangen like laten knipperen
 - [x] Matchlogica, melodie en regenboog-animatie
 - [x] Tweede Wokwi-project (hart B) met dezelfde sketch en `MIJN_ID = 'B'`
+- [x] Personeelsmonitor als webpagina gebouwd (`monitor/index.html`, eis E1–E6, zie ontwerpdocument §2.1 en §6.8)
+- [ ] ZONE-knop (GPIO 14) toevoegen aan `sketch.ino` en `diagram.json`, en elke 10 s en bij een wissel de zone publiceren op `…/hart/<id>/zone`
 - [ ] Hart A in Wokwi bijwerken met de juiste `diagram.json`
 - [ ] Match-demo met hart A en B testen in Wokwi (T1–T8)
 - [ ] **Product review 2:** demo van de flow, feedback noteren
@@ -53,6 +55,11 @@ review en een retrospective. Die leveren het bewijs voor W1, W2 en W3.
 | T6 | Onbekende kaart tikken | OLED: "Onbekend hart" |
 | T7 | 5 s niets doen na een tik | Terug naar IDLE |
 | T8 | Broker niet bereikbaar | Status blijft lokaal werken, OLED: "offline" |
+| T9 | Monitor openen, hart A op de dansvloer zetten (demopaneel of ZONE-knop) | Dansvloer toont 1 hart "A" (E2) |
+| T10 | Hart A van dansvloer naar bar laten gaan | Binnen 15 s staat A bij de bar en niet meer op de dansvloer (E3) |
+| T11 | Hart 60 s niets laten melden | Hart staat onder "Geen signaal" (E4) |
+| T12 | Zo veel harten in één zone zetten dat 70% en daarna 100% van de capaciteit wordt bereikt | Zone kleurt oranje ("druk") en daarna rood ("vol") (E5) |
+| T13 | Status wisselen, liken en matchen terwijl de monitor openstaat | De monitor toont hier niets van, alleen hart-ID en zone (E6) |
 
 ## Inleverlijst (bewijsmateriaal)
 - [ ] Ontwerpdocument (v1.0)
